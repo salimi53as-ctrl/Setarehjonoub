@@ -5,12 +5,11 @@ import sqlite3
 app = Flask(__name__)
 
 # 🔑 توکن بله
-BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM
-"
+BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
 BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
 
-# 👑 آیدی ادمین (بعداً با /id پر کن)
-ADMIN_ID = 123456789
+# 👑 ادمین (فعلاً خالی - با /id پر کن)
+ADMIN_ID = None
 
 # ================= دیتابیس =================
 conn = sqlite3.connect("players.db", check_same_thread=False)
@@ -38,7 +37,7 @@ def send_message(chat_id, text):
         "text": text
     })
 
-# ================= ذخیره بازیکن =================
+# ================= ذخیره =================
 def save_player(data):
     c.execute("""
     INSERT INTO players (name, father, national_id, birth, phone)
@@ -52,7 +51,7 @@ def save_player(data):
     ))
     conn.commit()
 
-# ================= گرفتن لیست بازیکنان =================
+# ================= لیست بازیکنان =================
 def get_players():
     c.execute("SELECT name, father, national_id, birth, phone FROM players")
     rows = c.fetchall()
@@ -60,9 +59,9 @@ def get_players():
     if not rows:
         return "هیچ بازیکنی ثبت نشده است."
 
-    text = ""
+    result = ""
     for r in rows:
-        text += (
+        result += (
             f"👤 نام: {r[0]}\n"
             f"👨 پدر: {r[1]}\n"
             f"🆔 کد ملی: {r[2]}\n"
@@ -70,7 +69,7 @@ def get_players():
             f"📞 تماس: {r[4]}\n"
             "----------------------\n"
         )
-    return text
+    return result
 
 # ================= webhook =================
 @app.route("/", methods=["POST"])
@@ -84,29 +83,31 @@ def webhook():
     chat_id = msg["chat"]["id"]
     text = msg.get("text", "")
 
-    # ساخت کاربر
     if chat_id not in users:
         users[chat_id] = {"step": 0, "data": {}}
 
     user = users[chat_id]
 
-    # ================= دستورات =================
+    # ================= گرفتن ID =================
+    if text == "/id":
+        global ADMIN_ID
+        ADMIN_ID = chat_id  # 👈 اولین کسی که /id بزند ادمین می‌شود
 
-    if text == "/start":
+        send_message(chat_id, f"🆔 آیدی شما ثبت شد:\n{chat_id}\n\n✔ شما ادمین شدید")
+
+    # ================= شروع =================
+    elif text == "/start":
         send_message(chat_id, "👋 سلام!\nنام و نام خانوادگی را وارد کنید:")
         user["step"] = 1
 
-    elif text == "/id":
-        send_message(chat_id, f"🆔 آیدی شما:\n{chat_id}")
-
+    # ================= لیست بازیکنان =================
     elif text == "/players":
-        if chat_id == ADMIN_ID:
+        if ADMIN_ID == chat_id:
             send_message(chat_id, "📋 لیست بازیکنان:\n\n" + get_players())
         else:
-            send_message(chat_id, "⛔ دسترسی ندارید")
+            send_message(chat_id, "⛔ شما ادمین نیستید")
 
     # ================= ثبت نام =================
-
     elif user["step"] == 1:
         user["data"]["name"] = text
         send_message(chat_id, "👨 نام پدر؟")
@@ -146,6 +147,6 @@ def webhook():
 
     return "ok"
 
-# ================= run =================
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
