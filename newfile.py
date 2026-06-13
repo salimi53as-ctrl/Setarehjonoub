@@ -7,7 +7,7 @@ app = Flask(__name__)
 BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
 BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
 
-# ذخیره کاربران در حافظه
+# کاربران موقت
 users = {}
 
 # ================= ذخیره در فایل =================
@@ -21,6 +21,14 @@ def save_user(data):
             f"شماره: {data['phone']}\n"
             "----------------------\n"
         )
+
+# ================= خواندن فایل =================
+def get_players():
+    try:
+        with open("players.txt", "r", encoding="utf-8") as f:
+            return f.read()
+    except:
+        return "هیچ بازیکنی ثبت نشده است."
 
 # ================= ارسال پیام =================
 def send_message(chat_id, text):
@@ -46,11 +54,16 @@ def webhook():
 
     user = users[chat_id]
 
-    # شروع ثبت نام
+    # ================= دستورات =================
     if text == "/start":
         send_message(chat_id, "👋 سلام!\nنام و نام خانوادگی را وارد کنید:")
         user["step"] = 1
 
+    elif text == "/players":
+        players = get_players()
+        send_message(chat_id, "📋 لیست بازیکنان:\n\n" + players)
+
+    # ================= ثبت نام =================
     elif user["step"] == 1:
         user["data"]["name"] = text
         send_message(chat_id, "👨 نام پدر؟")
@@ -74,7 +87,7 @@ def webhook():
     elif user["step"] == 5:
         user["data"]["phone"] = text
 
-        # 🔥 ذخیره در فایل
+        # ذخیره در فایل
         save_user(user["data"])
 
         send_message(chat_id,
