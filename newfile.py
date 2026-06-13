@@ -1,34 +1,30 @@
 from flask import Flask, request
 import requests
+import sqlite3
 
 app = Flask(__name__)
 
-# 🔑 توکن بله
 BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
 BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
 
-# کاربران موقت
+# ================= دیتابیس =================
+conn = sqlite3.connect("players.db", check_same_thread=False)
+c = conn.cursor()
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    father TEXT,
+    national_id TEXT,
+    birth TEXT,
+    phone TEXT
+)
+""")
+conn.commit()
+
+# ================= حافظه موقت =================
 users = {}
-
-# ================= ذخیره در فایل =================
-def save_user(data):
-    with open("players.txt", "a", encoding="utf-8") as f:
-        f.write(
-            f"نام: {data['name']}\n"
-            f"پدر: {data['father']}\n"
-            f"کد ملی: {data['national_id']}\n"
-            f"تولد: {data['birth']}\n"
-            f"شماره: {data['phone']}\n"
-            "----------------------\n"
-        )
-
-# ================= خواندن فایل =================
-def get_players():
-    try:
-        with open("players.txt", "r", encoding="utf-8") as f:
-            return f.read()
-    except:
-        return "هیچ بازیکنی ثبت نشده است."
 
 # ================= ارسال پیام =================
 def send_message(chat_id, text):
@@ -36,6 +32,34 @@ def send_message(chat_id, text):
         "chat_id": chat_id,
         "text": text
     })
+
+# ================= ذخیره در دیتابیس =================
+def save_player(data):
+    c.execute("""
+    INSERT INTO players (name, father, national_id, birth, phone)
+    VALUES (?, ?, ?, ?, ?)
+    """, (
+        data["name"],
+        data["father"],
+        data["national_id"],
+        data["birth"],
+        data["phone"]
+    ))
+    conn.commit()
+
+# ================= گرفتن لیست بازیکنان =================
+def get_players():
+    c.execute("SELECT name, father, national_id, birth, phone FROM players")
+    rows = c.fetchall()
+
+    if not rows:
+        return "هیچ بازیکنی ثبت نشده است."
+
+    text = ""
+    for r in rows:
+        text += f"👤 نام: {r[0]}\n👨 پدر: {r[1]}\n🆔 کد ملی: {r[2]}\n🎂 تولد: {r[3]}\n📞 تماس: {r[4]}\n-----------------\n"
+
+    return text
 
 # ================= webhook =================
 @app.route("/", methods=["POST"])
@@ -54,16 +78,15 @@ def webhook():
 
     user = users[chat_id]
 
-    # ================= دستورات =================
+    # دستورات
     if text == "/start":
         send_message(chat_id, "👋 سلام!\nنام و نام خانوادگی را وارد کنید:")
         user["step"] = 1
 
     elif text == "/players":
-        players = get_players()
-        send_message(chat_id, "📋 لیست بازیکنان:\n\n" + players)
+        send_message(chat_id, "📋 لیست بازیکنان:\n\n" + get_players())
 
-    # ================= ثبت نام =================
+    # ثبت نام
     elif user["step"] == 1:
         user["data"]["name"] = text
         send_message(chat_id, "👨 نام پدر؟")
@@ -87,8 +110,7 @@ def webhook():
     elif user["step"] == 5:
         user["data"]["phone"] = text
 
-        # ذخیره در فایل
-        save_user(user["data"])
+        save_player(user["data"])
 
         send_message(chat_id,
             "✅ ثبت نام انجام شد:\n\n"
@@ -104,6 +126,6 @@ def webhook():
 
     return "ok"
 
-# ================= run =================
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
