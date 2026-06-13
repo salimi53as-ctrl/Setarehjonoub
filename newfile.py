@@ -4,8 +4,12 @@ import sqlite3
 
 app = Flask(__name__)
 
+# 🔑 توکن بله
 BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
 BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
+
+# 👑 آیدی عددی ادمین (حتماً تغییر بده)
+ADMIN_ID = 123456789
 
 # ================= دیتابیس =================
 conn = sqlite3.connect("players.db", check_same_thread=False)
@@ -23,7 +27,7 @@ CREATE TABLE IF NOT EXISTS players (
 """)
 conn.commit()
 
-# ================= حافظه موقت =================
+# ================= کاربران موقت =================
 users = {}
 
 # ================= ارسال پیام =================
@@ -33,7 +37,7 @@ def send_message(chat_id, text):
         "text": text
     })
 
-# ================= ذخیره در دیتابیس =================
+# ================= ذخیره بازیکن =================
 def save_player(data):
     c.execute("""
     INSERT INTO players (name, father, national_id, birth, phone)
@@ -47,7 +51,7 @@ def save_player(data):
     ))
     conn.commit()
 
-# ================= گرفتن لیست بازیکنان =================
+# ================= گرفتن لیست =================
 def get_players():
     c.execute("SELECT name, father, national_id, birth, phone FROM players")
     rows = c.fetchall()
@@ -57,8 +61,14 @@ def get_players():
 
     text = ""
     for r in rows:
-        text += f"👤 نام: {r[0]}\n👨 پدر: {r[1]}\n🆔 کد ملی: {r[2]}\n🎂 تولد: {r[3]}\n📞 تماس: {r[4]}\n-----------------\n"
-
+        text += (
+            f"👤 نام: {r[0]}\n"
+            f"👨 پدر: {r[1]}\n"
+            f"🆔 کد ملی: {r[2]}\n"
+            f"🎂 تولد: {r[3]}\n"
+            f"📞 تماس: {r[4]}\n"
+            "----------------------\n"
+        )
     return text
 
 # ================= webhook =================
@@ -78,15 +88,20 @@ def webhook():
 
     user = users[chat_id]
 
-    # دستورات
+    # ================= دستورات =================
+
     if text == "/start":
         send_message(chat_id, "👋 سلام!\nنام و نام خانوادگی را وارد کنید:")
         user["step"] = 1
 
     elif text == "/players":
-        send_message(chat_id, "📋 لیست بازیکنان:\n\n" + get_players())
+        if chat_id == ADMIN_ID:
+            send_message(chat_id, "📋 لیست بازیکنان:\n\n" + get_players())
+        else:
+            send_message(chat_id, "⛔ شما اجازه دسترسی ندارید")
 
-    # ثبت نام
+    # ================= ثبت نام =================
+
     elif user["step"] == 1:
         user["data"]["name"] = text
         send_message(chat_id, "👨 نام پدر؟")
