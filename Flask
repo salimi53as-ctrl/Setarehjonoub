@@ -1,13 +1,14 @@
-from flask import Flask, request
-import json
-import os
+from flask import Flask, request, jsonify
+import json, os
 
 app = Flask(__name__)
 
 ADMIN_PASSWORD = "1234"
 DATA_FILE = "players.json"
 
-# ---------------- ذخیره و خواندن ----------------
+users = {}
+
+# ---------------- دیتابیس ----------------
 def load_players():
     if not os.path.exists(DATA_FILE):
         return []
@@ -18,114 +19,112 @@ def save_players(players):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(players, f, ensure_ascii=False, indent=2)
 
-# ---------------- حافظه موقت کاربران ----------------
-users = {}
-
 def get_user(chat_id):
     if chat_id not in users:
-        users[chat_id] = {
-            "logged": False,
-            "step": None,
-            "temp": {}
-        }
+        users[chat_id] = {"logged": False, "step": None, "temp": {}}
     return users[chat_id]
 
-# ---------------- روت اصلی ----------------
+# ---------------- ارسال پیام با دکمه ----------------
+def menu_message():
+    return {
+        "text": "⚽ پنل ادمین ستاره جنوب",
+        "reply_markup": {
+            "inline_keyboard": [
+                [{"text": "➕ ثبت بازیکن", "callback_data": "add"}],
+                [{"text": "📋 لیست بازیکنان", "callback_data": "list"}],
+                [{"text": "🗑 حذف بازیکن", "callback_data": "delete"}],
+                [{"text": "🚪 خروج", "callback_data": "exit"}]
+            ]
+        }
+    }
+
+# ---------------- وبهوک ----------------
 @app.route("/", methods=["POST"])
 def webhook():
     data = request.json
 
-    chat_id = data["message"]["chat"]["id"]
-    text = data["message"].get("text", "").strip()
+    # پیام عادی
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"].get("text", "")
+        user = get_user(chat_id)
 
-    user = get_user(chat_id)
+        if not user["logged"]:
+            if text == ADMIN_PASSWORD:
+                user["logged"] = True
+                return jsonify(menu_message())
+            return "🔒 پسورد ادمین را وارد کنید"
 
-    # ---------------- لاگین ----------------
-    if not user["logged"]:
-        if text == ADMIN_PASSWORD:
-            user["logged"] = True
-            return "✅ ورود موفق به پنل ادمین\n/start برای شروع"
-        return "🔒 لطفاً پسورد ادمین را وارد کنید"
+        if text == "/start":
+            return jsonify(menu_message())
 
-    # ---------------- منوی اصلی ----------------
-    if text == "/start":
-        return (
-            "⚽ پنل ادمین ستاره جنوب\n\n"
-            "1️⃣ ثبت بازیکن\n"
-            "2️⃣ لیست بازیکنان\n"
-            "3️⃣ حذف بازیکن\n"
-            "4️⃣ خروج"
-        )
+        players = load_players()
 
-    # ---------------- خروج ----------------
-    if text == "4":
-        user["logged"] = False
-        user["step"] = None
-        user["temp"] = {}
-        return "👋 خارج شدید"
+        # مراحل ثبت
+        if user["step"] == "name":
+            user["temp"]["name"] = text
+            user["step"] = "father"
+            return "👨 نام پدر؟"
 
-    players = load_players()
+        if user["step"] == "father":
+            user["temp"]["father"] = text
+            user["step"] = "national"
+            return "🆔 کد ملی؟"
 
-    # ---------------- ثبت بازیکن ----------------
-    if text == "1":
-        user["step"] = "name"
-        user["temp"] = {}
-        return "🧍 نام بازیکن را وارد کنید"
+        if user["step"] == "national":
+            user["temp"]["national"] = text
+            user["step"] = "phone"
+            return "📞 شماره تماس؟"
 
-    if user["step"] == "name":
-        user["temp"]["name"] = text
-        user["step"] = "father"
-        return "👨 نام پدر؟"
+        if user["step"] == "phone":
+            user["temp"]["phone"] = text
+            players.append(user["temp"])
+            save_players(players)
 
-    if user["step"] == "father":
-        user["temp"]["father"] = text
-        user["step"] = "national"
-        return "🆔 کد ملی؟"
+            user["step"] = None
+            user["temp"] = {}
+            return "✅ ثبت شد"
 
-    if user["step"] == "national":
-        user["temp"]["national"] = text
-        user["step"] = "phone"
-        return "📞 شماره تماس؟"
+        return "❗ /start بزن"
 
-    if user["step"] == "phone":
-        user["temp"]["phone"] = text
+    # دکمه‌ها (callback)
+    if "callback_query" in data:
+        chat_id = data["callback_query"]["message"]["chat"]["id"]
+        action = data["callback_query"]["data"]
+        user = get_user(chat_id)
 
-        players.append(user["temp"])
-        save_players(players)
+        players = load_players()
 
-        user["step"] = None
-        user["temp"] = {}
+        if action == "add":
+            user["step"] = "name"
+            user["temp"] = {}
+            return "🧍 نام بازیکن؟"
 
-        return "✅ بازیکن با موفقیت ثبت شد"
+        if action == "list":
+            if not players:
+                return "❌ لیست خالی است"
 
-    # ---------------- لیست بازیکنان ----------------
-    if text == "2":
-        if not players:
-            return "❌ هیچ بازیکنی ثبت نشده"
+            msg = "📋 بازیکنان:\n\n"
+            for p in players:
+                msg += f"{p['name']} - {p['national']}\n"
+            return msg
 
-        msg = "📋 لیست بازیکنان:\n\n"
-        for i, p in enumerate(players, 1):
-            msg += f"{i}) {p['name']} - {p['national']}\n"
+        if action == "delete":
+            user["step"] = "delete"
+            return "🗑 کد ملی برای حذف؟"
 
-        return msg
+        if action == "exit":
+            user["logged"] = False
+            return "👋 خارج شدید"
 
-    # ---------------- حذف بازیکن ----------------
-    if text == "3":
-        user["step"] = "delete"
-        return "🗑 کد ملی بازیکن برای حذف را وارد کنید"
+        if user["step"] == "delete":
+            nat = action
+            new_list = [p for p in players if p["national"] != nat]
+            save_players(new_list)
+            user["step"] = None
+            return "🗑 حذف شد"
 
-    if user["step"] == "delete":
-        national = text
-
-        new_players = [p for p in players if p["national"] != national]
-
-        save_players(new_players)
-
-        user["step"] = None
-
-        return "🗑 اگر وجود داشته باشد حذف شد"
-
-    return "❗ دستور نامعتبر"
+    return "OK"
 
 
 if __name__ == "__main__":
