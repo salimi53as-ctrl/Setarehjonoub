@@ -1,1 +1,117 @@
+from flask import Flask, request
+import json
 
+app = Flask(__name__)
+
+TOKEN = "YOUR_BALE_BOT_TOKEN"
+ADMIN_PASSWORD = "1234"
+
+admin_state = {}
+
+# ---------------- ذخیره بازیکن ----------------
+def save_player(data):
+    with open("players.txt", "a", encoding="utf-8") as f:
+        f.write(json.dumps(data, ensure_ascii=False) + "\n")
+
+
+# ---------------- خواندن بازیکنان ----------------
+def get_players():
+    try:
+        with open("players.txt", "r", encoding="utf-8") as f:
+            return [json.loads(i) for i in f.readlines()]
+    except:
+        return []
+
+
+# ---------------- حذف بازیکن ----------------
+def delete_player(national):
+    players = get_players()
+    players = [p for p in players if p["national"] != national]
+
+    with open("players.txt", "w", encoding="utf-8") as f:
+        for p in players:
+            f.write(json.dumps(p, ensure_ascii=False) + "\n")
+
+
+# ---------------- پیام ربات ----------------
+@app.route("/", methods=["POST"])
+def webhook():
+    data = request.json
+
+    chat_id = data["message"]["chat"]["id"]
+    text = data["message"].get("text", "")
+
+    # ورود ادمین
+    if chat_id not in admin_state:
+        admin_state[chat_id] = {"logged": False, "step": None, "temp": {}}
+
+    state = admin_state[chat_id]
+
+    # ---------------- لاگین ----------------
+    if not state["logged"]:
+        if text == ADMIN_PASSWORD:
+            state["logged"] = True
+            return "ادمین وارد شد"
+        return "پسورد ادمین را وارد کنید"
+
+    # ---------------- منو ----------------
+    if text == "/start":
+        return "پنل ادمین:\n1- ثبت بازیکن\n2- نمایش لیست\n3- حذف بازیکن"
+
+    # ---------------- ثبت بازیکن ----------------
+    if text == "1":
+        state["step"] = "name"
+        return "نام بازیکن را وارد کنید"
+
+    if state["step"] == "name":
+        state["temp"]["name"] = text
+        state["step"] = "father"
+        return "نام پدر؟"
+
+    if state["step"] == "father":
+        state["temp"]["father"] = text
+        state["step"] = "national"
+        return "کد ملی؟"
+
+    if state["step"] == "national":
+        state["temp"]["national"] = text
+        state["step"] = "phone"
+        return "شماره تماس؟"
+
+    if state["step"] == "phone":
+        state["temp"]["phone"] = text
+
+        save_player(state["temp"])
+
+        state["step"] = None
+        state["temp"] = {}
+
+        return "بازیکن ثبت شد ✔️"
+
+    # ---------------- لیست ----------------
+    if text == "2":
+        players = get_players()
+        if not players:
+            return "هیچ بازیکنی ثبت نشده"
+
+        msg = ""
+        for p in players:
+            msg += f"{p['name']} - {p['national']}\n"
+
+        return msg
+
+    # ---------------- حذف ----------------
+    if text == "3":
+        state["step"] = "delete"
+        return "کد ملی بازیکن برای حذف؟"
+
+    if state["step"] == "delete":
+        delete_player(text)
+        state["step"] = None
+        return "حذف شد ✔️"
+
+    return "دستور نامعتبر"
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
