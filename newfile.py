@@ -1,3 +1,57 @@
+from flask import Flask, request
+import requests
+import sqlite3
+
+app = Flask(__name__)
+
+# 🔑 توکن بله
+BOT_TOKEN = "YOUR_TOKEN_HERE"
+BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
+
+# 👑 ادمین
+ADMIN_ID = None
+
+# ================= DATABASE =================
+conn = sqlite3.connect("players.db", check_same_thread=False)
+c = conn.cursor()
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    father TEXT,
+    national_id TEXT,
+    phone TEXT,
+    birth TEXT
+)
+""")
+conn.commit()
+
+# ================= USERS =================
+users = {}
+
+# ================= SEND MESSAGE =================
+def send_message(chat_id, text):
+    requests.post(f"{BASE_URL}/sendMessage", data={
+        "chat_id": chat_id,
+        "text": text
+    })
+
+# ================= SAVE =================
+def save_player(data):
+    c.execute("""
+    INSERT INTO players (name,father,national_id,phone,birth)
+    VALUES (?,?,?,?,?)
+    """, (
+        data["name"],
+        data["father"],
+        data["national_id"],
+        data["phone"],
+        data["birth"]
+    ))
+    conn.commit()
+
+# ================= WEBHOOK =================
 @app.route("/", methods=["POST"])
 def webhook():
     global ADMIN_ID
@@ -18,10 +72,16 @@ def webhook():
 
     user = users[chat_id]
 
-    # ================= START =================
+    # ================= /start =================
     if text == "/start":
         user["step"] = 1
-        send_message(chat_id, "👤 اسم و نام خانوادگی؟")
+        send_message(chat_id, "👤 نام و نام خانوادگی را وارد کنید")
+        return "ok"
+
+    # ================= /id =================
+    if text == "/id":
+        ADMIN_ID = chat_id
+        send_message(chat_id, f"🆔 شما ادمین شدید:\n{chat_id}")
         return "ok"
 
     # ================= STEP 1 NAME =================
@@ -84,10 +144,14 @@ def webhook():
             f"👨 پدر: {user['data']['father']}\n"
             f"🆔 کد ملی: {user['data']['national_id']}\n"
             f"📞 تماس: {user['data']['phone']}\n"
-            f"🎂 تاریخ: {user['data']['birth']}"
+            f"🎂 تاریخ تولد: {user['data']['birth']}"
         )
 
         user["step"] = 0
         user["data"] = {}
 
     return "ok"
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
