@@ -1,14 +1,32 @@
-from flask import Flask, request, jsonify
-import json, os
+from flask import Flask, request
+import requests
+import json
+import os
 
 app = Flask(__name__)
 
-ADMIN_PASSWORD = "1234"
+TOKEN = "YOUR_BALE_BOT_TOKEN"
+BASE_URL = f"https://tapi.bale.ai/bot{TOKEN}"
+
 DATA_FILE = "players.json"
 
 users = {}
 
-# ---------------- دیتابیس ----------------
+# ------------------- ارسال پیام واقعی -------------------
+def send_message(chat_id, text, reply_markup=None):
+    url = BASE_URL + "/sendMessage"
+
+    payload = {
+        "chat_id": chat_id,
+        "text": text
+    }
+
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+
+    requests.post(url, json=payload)
+
+# ------------------- دیتابیس -------------------
 def load_players():
     if not os.path.exists(DATA_FILE):
         return []
@@ -19,112 +37,116 @@ def save_players(players):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(players, f, ensure_ascii=False, indent=2)
 
+# ------------------- کاربر -------------------
 def get_user(chat_id):
     if chat_id not in users:
         users[chat_id] = {"logged": False, "step": None, "temp": {}}
     return users[chat_id]
 
-# ---------------- ارسال پیام با دکمه ----------------
-def menu_message():
+# ------------------- منو -------------------
+def menu():
     return {
-        "text": "⚽ پنل ادمین ستاره جنوب",
-        "reply_markup": {
-            "inline_keyboard": [
-                [{"text": "➕ ثبت بازیکن", "callback_data": "add"}],
-                [{"text": "📋 لیست بازیکنان", "callback_data": "list"}],
-                [{"text": "🗑 حذف بازیکن", "callback_data": "delete"}],
-                [{"text": "🚪 خروج", "callback_data": "exit"}]
-            ]
-        }
+        "inline_keyboard": [
+            [{"text": "➕ ثبت بازیکن", "callback_data": "add"}],
+            [{"text": "📋 لیست بازیکنان", "callback_data": "list"}],
+            [{"text": "🗑 حذف بازیکن", "callback_data": "delete"}],
+            [{"text": "🚪 خروج", "callback_data": "exit"}]
+        ]
     }
 
-# ---------------- وبهوک ----------------
+# ------------------- Webhook -------------------
 @app.route("/", methods=["POST"])
 def webhook():
     data = request.json
 
-    # پیام عادی
+    # پیام معمولی
     if "message" in data:
         chat_id = data["message"]["chat"]["id"]
         text = data["message"].get("text", "")
+
         user = get_user(chat_id)
 
+        # لاگین ادمین
         if not user["logged"]:
-            if text == ADMIN_PASSWORD:
+            if text == "1234":
                 user["logged"] = True
-                return jsonify(menu_message())
-            return "🔒 پسورد ادمین را وارد کنید"
+                send_message(chat_id, "✅ وارد پنل شدی", menu())
+            else:
+                send_message(chat_id, "🔒 پسورد ادمین را وارد کنید")
+            return "ok"
 
         if text == "/start":
-            return jsonify(menu_message())
+            send_message(chat_id, "⚽ پنل ادمین", menu())
+            return "ok"
 
         players = load_players()
 
-        # مراحل ثبت
+        # ثبت مرحله‌ای
         if user["step"] == "name":
             user["temp"]["name"] = text
             user["step"] = "father"
-            return "👨 نام پدر؟"
+            send_message(chat_id, "👨 نام پدر؟")
 
-        if user["step"] == "father":
+        elif user["step"] == "father":
             user["temp"]["father"] = text
             user["step"] = "national"
-            return "🆔 کد ملی؟"
+            send_message(chat_id, "🆔 کد ملی؟")
 
-        if user["step"] == "national":
+        elif user["step"] == "national":
             user["temp"]["national"] = text
             user["step"] = "phone"
-            return "📞 شماره تماس؟"
+            send_message(chat_id, "📞 شماره تماس؟")
 
-        if user["step"] == "phone":
+        elif user["step"] == "phone":
             user["temp"]["phone"] = text
             players.append(user["temp"])
             save_players(players)
 
             user["step"] = None
             user["temp"] = {}
-            return "✅ ثبت شد"
 
-        return "❗ /start بزن"
+            send_message(chat_id, "✅ بازیکن ثبت شد")
 
-    # دکمه‌ها (callback)
+        return "ok"
+
+    # دکمه‌ها
     if "callback_query" in data:
         chat_id = data["callback_query"]["message"]["chat"]["id"]
         action = data["callback_query"]["data"]
-        user = get_user(chat_id)
 
+        user = get_user(chat_id)
         players = load_players()
 
         if action == "add":
             user["step"] = "name"
             user["temp"] = {}
-            return "🧍 نام بازیکن؟"
+            send_message(chat_id, "🧍 نام بازیکن؟")
 
-        if action == "list":
+        elif action == "list":
             if not players:
-                return "❌ لیست خالی است"
+                send_message(chat_id, "❌ لیست خالی است")
+            else:
+                msg = "📋 بازیکنان:\n\n"
+                for p in players:
+                    msg += f"{p['name']} - {p['national']}\n"
+                send_message(chat_id, msg)
 
-            msg = "📋 بازیکنان:\n\n"
-            for p in players:
-                msg += f"{p['name']} - {p['national']}\n"
-            return msg
-
-        if action == "delete":
+        elif action == "delete":
             user["step"] = "delete"
-            return "🗑 کد ملی برای حذف؟"
+            send_message(chat_id, "🗑 کد ملی برای حذف؟")
 
-        if action == "exit":
+        elif action == "exit":
             user["logged"] = False
-            return "👋 خارج شدید"
+            send_message(chat_id, "👋 خارج شدی")
 
-        if user["step"] == "delete":
+        elif user["step"] == "delete":
             nat = action
-            new_list = [p for p in players if p["national"] != nat]
-            save_players(new_list)
+            players = [p for p in players if p["national"] != nat]
+            save_players(players)
             user["step"] = None
-            return "🗑 حذف شد"
+            send_message(chat_id, "🗑 حذف شد")
 
-    return "OK"
+    return "ok"
 
 
 if __name__ == "__main__":
