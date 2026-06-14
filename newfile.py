@@ -5,15 +5,12 @@ import re
 
 app = Flask(__name__)
 
-# 🔑 توکن بله
-BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
+BOT_TOKEN = "YOUR_TOKEN_HERE"
 BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
 
-# 👑 ادمین
-ADMIN_ID = 848341355
+ADMIN_ID = None
 
-
-# ================= دیتابیس =================
+# ================= DB =================
 conn = sqlite3.connect("players.db", check_same_thread=False)
 c = conn.cursor()
 
@@ -29,75 +26,51 @@ CREATE TABLE IF NOT EXISTS players (
 """)
 conn.commit()
 
-# ================= کاربران =================
 users = {}
 
-# ================= اعتبارسنجی =================
-def is_name(text):
-    return not text.isdigit() and len(text) >= 2
+# ================= VALIDATION =================
+def is_name(t):
+    return t and not t.isdigit() and len(t) >= 2
 
-def is_national_id(text):
-    return text.isdigit() and len(text) == 10
+def is_national_id(t):
+    return t and t.isdigit() and len(t) == 10
 
-def is_date(text):
-    return bool(re.match(r"^\d{4}[/-]\d{1,2}[/-]\d{1,2}$", text))
+def is_date(t):
+    return bool(re.match(r"^\d{4}[/-]\d{1,2}[/-]\d{1,2}$", t))
 
-def is_phone(text):
-    return text.isdigit() and len(text) >= 10
+def is_phone(t):
+    return t and t.isdigit() and len(t) >= 10
 
-# ================= ارسال پیام =================
+# ================= SEND =================
 def send_message(chat_id, text):
     requests.post(f"{BASE_URL}/sendMessage", data={
         "chat_id": chat_id,
         "text": text
     })
 
-# ================= ذخیره =================
-def save_player(data):
+# ================= SAVE =================
+def save_player(d):
     c.execute("""
-    INSERT INTO players (name, father, national_id, birth, phone)
-    VALUES (?, ?, ?, ?, ?)
-    """, (
-        data["name"],
-        data["father"],
-        data["national_id"],
-        data["birth"],
-        data["phone"]
-    ))
+    INSERT INTO players (name,father,national_id,birth,phone)
+    VALUES (?,?,?,?,?)
+    """, (d["name"], d["father"], d["national_id"], d["birth"], d["phone"]))
     conn.commit()
 
-# ================= لیست =================
-def get_players():
-    c.execute("SELECT name, father, national_id, birth, phone FROM players")
-    rows = c.fetchall()
-
-    if not rows:
-        return "هیچ بازیکنی ثبت نشده است."
-
-    result = ""
-    for r in rows:
-        result += (
-            f"👤 نام: {r[0]}\n"
-            f"👨 پدر: {r[1]}\n"
-            f"🆔 کد ملی: {r[2]}\n"
-            f"🎂 تولد: {r[3]}\n"
-            f"📞 تماس: {r[4]}\n"
-            "----------------------\n"
-        )
-    return result
-
-# ================= webhook =================
+# ================= WEBHOOK =================
 @app.route("/", methods=["POST"])
 def webhook():
     global ADMIN_ID
 
-    data = request.json
-    if not data or "message" not in data:
+    data = request.get_json(silent=True)
+    if not data:
         return "ok"
 
-    msg = data["message"]
-    chat_id = msg["chat"]["id"]
-    text = msg.get("text", "")
+    msg = data.get("message", {})
+    chat_id = msg.get("chat", {}).get("id")
+    text = msg.get("text")
+
+    if not chat_id or not text:
+        return "ok"
 
     if chat_id not in users:
         users[chat_id] = {"step": 0, "data": {}}
@@ -107,37 +80,34 @@ def webhook():
     # ================= /id =================
     if text == "/id":
         ADMIN_ID = chat_id
-        send_message(chat_id, f"🆔 آیدی شما ثبت شد:\n{chat_id}\n✔ شما ادمین شدید")
+        send_message(chat_id, f"🆔 شما ادمین شدید:\n{chat_id}")
+        return "ok"
 
     # ================= start =================
-    elif text == "/start":
-        send_message(chat_id, "👋 سلام!\nنام و نام خانوادگی را وارد کنید:")
+    if text == "/start":
+        send_message(chat_id, "👤 نام و نام خانوادگی؟")
         user["step"] = 1
+        return "ok"
 
-    # ================= players =================
-    elif text == "/players":
-        if ADMIN_ID == chat_id:
-            send_message(chat_id, "📋 لیست بازیکنان:\n\n" + get_players())
-        else:
-            send_message(chat_id, "⛔ دسترسی ندارید")
-
-    # ================= ثبت نام =================
-    elif user["step"] == 1:
+    # ================= STEP 1 NAME =================
+    if user["step"] == 1:
         if not is_name(text):
-            send_message(chat_id, "❌ نام معتبر نیست")
+            send_message(chat_id, "❌ نام اشتباه است")
         else:
             user["data"]["name"] = text
             send_message(chat_id, "👨 نام پدر؟")
             user["step"] = 2
 
+    # ================= STEP 2 FATHER =================
     elif user["step"] == 2:
         if not is_name(text):
-            send_message(chat_id, "❌ نام پدر معتبر نیست")
+            send_message(chat_id, "❌ نام پدر اشتباه است")
         else:
             user["data"]["father"] = text
             send_message(chat_id, "🆔 کد ملی؟ (10 رقم)")
             user["step"] = 3
 
+    # ================= STEP 3 NATIONAL ID =================
     elif user["step"] == 3:
         if not is_national_id(text):
             send_message(chat_id, "❌ کد ملی باید 10 رقم باشد")
@@ -146,6 +116,7 @@ def webhook():
             send_message(chat_id, "🎂 تاریخ تولد؟ (مثال: 1385/05/12)")
             user["step"] = 4
 
+    # ================= STEP 4 BIRTH =================
     elif user["step"] == 4:
         if not is_date(text):
             send_message(chat_id, "❌ فرمت تاریخ اشتباه است")
@@ -154,9 +125,10 @@ def webhook():
             send_message(chat_id, "📞 شماره تماس؟")
             user["step"] = 5
 
+    # ================= STEP 5 PHONE =================
     elif user["step"] == 5:
         if not is_phone(text):
-            send_message(chat_id, "❌ شماره تلفن اشتباه است")
+            send_message(chat_id, "❌ شماره تماس اشتباه است")
         else:
             user["data"]["phone"] = text
 
@@ -185,14 +157,12 @@ import re
 
 app = Flask(__name__)
 
-# 🔑 توکن بله
 BOT_TOKEN = "YOUR_TOKEN_HERE"
 BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
 
-# 👑 ادمین
 ADMIN_ID = None
 
-# ================= دیتابیس =================
+# ================= DB =================
 conn = sqlite3.connect("players.db", check_same_thread=False)
 c = conn.cursor()
 
@@ -208,75 +178,51 @@ CREATE TABLE IF NOT EXISTS players (
 """)
 conn.commit()
 
-# ================= کاربران =================
 users = {}
 
-# ================= اعتبارسنجی =================
-def is_name(text):
-    return not text.isdigit() and len(text) >= 2
+# ================= VALIDATION =================
+def is_name(t):
+    return t and not t.isdigit() and len(t) >= 2
 
-def is_national_id(text):
-    return text.isdigit() and len(text) == 10
+def is_national_id(t):
+    return t and t.isdigit() and len(t) == 10
 
-def is_date(text):
-    return bool(re.match(r"^\d{4}[/-]\d{1,2}[/-]\d{1,2}$", text))
+def is_date(t):
+    return bool(re.match(r"^\d{4}[/-]\d{1,2}[/-]\d{1,2}$", t))
 
-def is_phone(text):
-    return text.isdigit() and len(text) >= 10
+def is_phone(t):
+    return t and t.isdigit() and len(t) >= 10
 
-# ================= ارسال پیام =================
+# ================= SEND =================
 def send_message(chat_id, text):
     requests.post(f"{BASE_URL}/sendMessage", data={
         "chat_id": chat_id,
         "text": text
     })
 
-# ================= ذخیره =================
-def save_player(data):
+# ================= SAVE =================
+def save_player(d):
     c.execute("""
-    INSERT INTO players (name, father, national_id, birth, phone)
-    VALUES (?, ?, ?, ?, ?)
-    """, (
-        data["name"],
-        data["father"],
-        data["national_id"],
-        data["birth"],
-        data["phone"]
-    ))
+    INSERT INTO players (name,father,national_id,birth,phone)
+    VALUES (?,?,?,?,?)
+    """, (d["name"], d["father"], d["national_id"], d["birth"], d["phone"]))
     conn.commit()
 
-# ================= لیست =================
-def get_players():
-    c.execute("SELECT name, father, national_id, birth, phone FROM players")
-    rows = c.fetchall()
-
-    if not rows:
-        return "هیچ بازیکنی ثبت نشده است."
-
-    result = ""
-    for r in rows:
-        result += (
-            f"👤 نام: {r[0]}\n"
-            f"👨 پدر: {r[1]}\n"
-            f"🆔 کد ملی: {r[2]}\n"
-            f"🎂 تولد: {r[3]}\n"
-            f"📞 تماس: {r[4]}\n"
-            "----------------------\n"
-        )
-    return result
-
-# ================= webhook =================
+# ================= WEBHOOK =================
 @app.route("/", methods=["POST"])
 def webhook():
     global ADMIN_ID
 
-    data = request.json
-    if not data or "message" not in data:
+    data = request.get_json(silent=True)
+    if not data:
         return "ok"
 
-    msg = data["message"]
-    chat_id = msg["chat"]["id"]
-    text = msg.get("text", "")
+    msg = data.get("message", {})
+    chat_id = msg.get("chat", {}).get("id")
+    text = msg.get("text")
+
+    if not chat_id or not text:
+        return "ok"
 
     if chat_id not in users:
         users[chat_id] = {"step": 0, "data": {}}
@@ -286,37 +232,34 @@ def webhook():
     # ================= /id =================
     if text == "/id":
         ADMIN_ID = chat_id
-        send_message(chat_id, f"🆔 آیدی شما ثبت شد:\n{chat_id}\n✔ شما ادمین شدید")
+        send_message(chat_id, f"🆔 شما ادمین شدید:\n{chat_id}")
+        return "ok"
 
     # ================= start =================
-    elif text == "/start":
-        send_message(chat_id, "👋 سلام!\nنام و نام خانوادگی را وارد کنید:")
+    if text == "/start":
+        send_message(chat_id, "👤 نام و نام خانوادگی؟")
         user["step"] = 1
+        return "ok"
 
-    # ================= players =================
-    elif text == "/players":
-        if ADMIN_ID == chat_id:
-            send_message(chat_id, "📋 لیست بازیکنان:\n\n" + get_players())
-        else:
-            send_message(chat_id, "⛔ دسترسی ندارید")
-
-    # ================= ثبت نام =================
-    elif user["step"] == 1:
+    # ================= STEP 1 NAME =================
+    if user["step"] == 1:
         if not is_name(text):
-            send_message(chat_id, "❌ نام معتبر نیست")
+            send_message(chat_id, "❌ نام اشتباه است")
         else:
             user["data"]["name"] = text
             send_message(chat_id, "👨 نام پدر؟")
             user["step"] = 2
 
+    # ================= STEP 2 FATHER =================
     elif user["step"] == 2:
         if not is_name(text):
-            send_message(chat_id, "❌ نام پدر معتبر نیست")
+            send_message(chat_id, "❌ نام پدر اشتباه است")
         else:
             user["data"]["father"] = text
             send_message(chat_id, "🆔 کد ملی؟ (10 رقم)")
             user["step"] = 3
 
+    # ================= STEP 3 NATIONAL ID =================
     elif user["step"] == 3:
         if not is_national_id(text):
             send_message(chat_id, "❌ کد ملی باید 10 رقم باشد")
@@ -325,6 +268,7 @@ def webhook():
             send_message(chat_id, "🎂 تاریخ تولد؟ (مثال: 1385/05/12)")
             user["step"] = 4
 
+    # ================= STEP 4 BIRTH =================
     elif user["step"] == 4:
         if not is_date(text):
             send_message(chat_id, "❌ فرمت تاریخ اشتباه است")
@@ -333,9 +277,10 @@ def webhook():
             send_message(chat_id, "📞 شماره تماس؟")
             user["step"] = 5
 
+    # ================= STEP 5 PHONE =================
     elif user["step"] == 5:
         if not is_phone(text):
-            send_message(chat_id, "❌ شماره تلفن اشتباه است")
+            send_message(chat_id, "❌ شماره تماس اشتباه است")
         else:
             user["data"]["phone"] = text
 
