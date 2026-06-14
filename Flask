@@ -12,7 +12,7 @@ DATA_FILE = "players.json"
 
 users = {}
 
-# ------------------- ارسال پیام واقعی -------------------
+# ---------------- ارسال پیام ----------------
 def send_message(chat_id, text, reply_markup=None):
     url = BASE_URL + "/sendMessage"
 
@@ -26,7 +26,7 @@ def send_message(chat_id, text, reply_markup=None):
 
     requests.post(url, json=payload)
 
-# ------------------- دیتابیس -------------------
+# ---------------- دیتابیس ----------------
 def load_players():
     if not os.path.exists(DATA_FILE):
         return []
@@ -37,13 +37,13 @@ def save_players(players):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(players, f, ensure_ascii=False, indent=2)
 
-# ------------------- کاربر -------------------
+# ---------------- کاربر ----------------
 def get_user(chat_id):
     if chat_id not in users:
         users[chat_id] = {"logged": False, "step": None, "temp": {}}
     return users[chat_id]
 
-# ------------------- منو -------------------
+# ---------------- منو ----------------
 def menu():
     return {
         "inline_keyboard": [
@@ -54,19 +54,27 @@ def menu():
         ]
     }
 
-# ------------------- Webhook -------------------
+# ---------------- تست سرور ----------------
+@app.route("/", methods=["GET"])
+def home():
+    return "BOT IS RUNNING"
+
+# ---------------- WEBHOOK (مهم‌ترین بخش) ----------------
 @app.route("/", methods=["POST"])
 def webhook():
-    data = request.json
 
-    # پیام معمولی
+    data = request.get_json()
+
+    print("📩 NEW UPDATE:", data)  # برای دیباگ در Render
+
+    # پیام عادی
     if "message" in data:
         chat_id = data["message"]["chat"]["id"]
         text = data["message"].get("text", "")
 
         user = get_user(chat_id)
 
-        # لاگین ادمین
+        # لاگین
         if not user["logged"]:
             if text == "1234":
                 user["logged"] = True
@@ -76,12 +84,12 @@ def webhook():
             return "ok"
 
         if text == "/start":
-            send_message(chat_id, "⚽ پنل ادمین", menu())
+            send_message(chat_id, "⚽ پنل ادمین ستاره جنوب", menu())
             return "ok"
 
         players = load_players()
 
-        # ثبت مرحله‌ای
+        # مراحل ثبت
         if user["step"] == "name":
             user["temp"]["name"] = text
             user["step"] = "father"
@@ -99,6 +107,7 @@ def webhook():
 
         elif user["step"] == "phone":
             user["temp"]["phone"] = text
+
             players.append(user["temp"])
             save_players(players)
 
@@ -138,13 +147,6 @@ def webhook():
         elif action == "exit":
             user["logged"] = False
             send_message(chat_id, "👋 خارج شدی")
-
-        elif user["step"] == "delete":
-            nat = action
-            players = [p for p in players if p["national"] != nat]
-            save_players(players)
-            user["step"] = None
-            send_message(chat_id, "🗑 حذف شد")
 
     return "ok"
 
