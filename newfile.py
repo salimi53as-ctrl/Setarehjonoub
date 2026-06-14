@@ -5,7 +5,7 @@ import sqlite3
 app = Flask(__name__)
 
 # 🔑 توکن بله
-BOT_TOKEN = "YOUR_TOKEN_HERE"
+BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
 BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
 
 # 👑 ادمین
