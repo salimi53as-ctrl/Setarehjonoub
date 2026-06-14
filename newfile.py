@@ -9,7 +9,7 @@ BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
 BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
 
 # 👑 ادمین (فعلاً خالی - با /id پر کن)
-ADMIN_ID = None
+ADMIN_ID = 848341355
 
 # ================= دیتابیس =================
 conn = sqlite3.connect("players.db", check_same_thread=False)
