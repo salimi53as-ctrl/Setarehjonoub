@@ -1,123 +1,175 @@
-from flask import Flask, render_template_string
+from flask import Flask, request, render_template_string
+import requests
 import sqlite3
 import os
 
 app = Flask(__name__)
 
-DB_FILE = "club.db"
+# ================= BOT CONFIG =================
+BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
+BASE_URL = f"https://tapi.bale.ai/bot{848341355}"
+
+users = {}
 
 # ================= DATABASE =================
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
+DB = "club.db"
 
+def init_db():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
     c.execute("""
     CREATE TABLE IF NOT EXISTS players (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
-        position TEXT,
-        age TEXT,
+        father TEXT,
+        national_id TEXT,
+        birth TEXT,
         phone TEXT
     )
     """)
-
     conn.commit()
     conn.close()
 
 init_db()
 
-# ================= GET PLAYERS =================
-def get_players():
-    conn = sqlite3.connect(DB_FILE)
+def save_player(data):
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
-    c.execute("SELECT name, position, age, phone FROM players")
+    c.execute("""
+        INSERT INTO players (name, father, national_id, birth, phone)
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        data["name"],
+        data["father"],
+        data["national_id"],
+        data["birth"],
+        data["phone"]
+    ))
+    conn.commit()
+    conn.close()
+
+def get_players():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("SELECT name, father, national_id, birth, phone FROM players")
     rows = c.fetchall()
     conn.close()
     return rows
 
-# ================= DASHBOARD HTML =================
+# ================= SEND MESSAGE =================
+def send_message(chat_id, text):
+    try:
+        requests.post(f"{BASE_URL}/sendMessage", data={
+            "chat_id": chat_id,
+            "text": text
+        })
+    except:
+        pass
+
+# ================= WEBHOOK =================
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json
+
+    if not data or "message" not in data:
+        return "ok"
+
+    msg = data["message"]
+    chat_id = msg["chat"]["id"]
+    text = msg.get("text", "")
+
+    if chat_id not in users:
+        users[chat_id] = {"step": 0, "data": {}}
+
+    user = users[chat_id]
+
+    if text == "/start":
+        send_message(chat_id, "👋 سلام!\nنام و نام خانوادگی:")
+        user["step"] = 1
+
+    elif user["step"] == 1:
+        user["data"]["name"] = text
+        send_message(chat_id, "👨 نام پدر؟")
+        user["step"] = 2
+
+    elif user["step"] == 2:
+        user["data"]["father"] = text
+        send_message(chat_id, "🆔 کد ملی؟")
+        user["step"] = 3
+
+    elif user["step"] == 3:
+        user["data"]["national_id"] = text
+        send_message(chat_id, "🎂 تاریخ تولد؟")
+        user["step"] = 4
+
+    elif user["step"] == 4:
+        user["data"]["birth"] = text
+        send_message(chat_id, "📞 شماره تماس؟")
+        user["step"] = 5
+
+    elif user["step"] == 5:
+        user["data"]["phone"] = text
+
+        save_player(user["data"])
+
+        send_message(chat_id,
+            "✅ ثبت شد!\n\n"
+            f"👤 {user['data']['name']}\n"
+            f"📞 {user['data']['phone']}"
+        )
+
+        user["step"] = 0
+        user["data"] = {}
+
+    return "ok"
+
+# ================= DASHBOARD =================
 HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>باشگاه ستاره جنوب</title>
-    <style>
-        body {
-            font-family: sans-serif;
-            background: linear-gradient(135deg, #0b1a2b, #142b44);
-            color: white;
-            text-align: center;
-            margin: 0;
-        }
-
-        h1 {
-            color: gold;
-            margin-top: 20px;
-        }
-
-        table {
-            margin: 30px auto;
-            width: 90%;
-            border-collapse: collapse;
-            background: rgba(255,255,255,0.05);
-            border-radius: 10px;
-            overflow: hidden;
-        }
-
-        th, td {
-            padding: 12px;
-            border-bottom: 1px solid #333;
-        }
-
-        th {
-            background: #1f3b5c;
-            color: gold;
-        }
-
-        tr:hover {
-            background: rgba(255,255,255,0.1);
-        }
-
-        .box {
-            margin-top: 20px;
-        }
-    </style>
+<title>ستاره جنوب</title>
+<style>
+body{background:#0b1a2b;color:white;font-family:sans-serif;text-align:center;}
+h1{color:gold;}
+table{margin:auto;width:90%;border-collapse:collapse;}
+th,td{padding:10px;border:1px solid #444;}
+th{background:#1f3b5c;color:gold;}
+</style>
 </head>
 <body>
 
 <h1>⚽ باشگاه ستاره جنوب 🐉</h1>
-<p>داشبورد مدیریت بازیکنان</p>
+<p>داشبورد بازیکنان</p>
 
-<div class="box">
 <table>
 <tr>
 <th>نام</th>
-<th>پست</th>
-<th>رده سنی</th>
-<th>شماره تماس</th>
+<th>پدر</th>
+<th>کد ملی</th>
+<th>تولد</th>
+<th>تماس</th>
 </tr>
 
 {% for p in players %}
 <tr>
-<td>{{ p[0] }}</td>
-<td>{{ p[1] }}</td>
-<td>{{ p[2] }}</td>
-<td>{{ p[3] }}</td>
+<td>{{p[0]}}</td>
+<td>{{p[1]}}</td>
+<td>{{p[2]}}</td>
+<td>{{p[3]}}</td>
+<td>{{p[4]}}</td>
 </tr>
 {% endfor %}
 
 </table>
-</div>
 
 </body>
 </html>
 """
 
-# ================= ROUTE =================
 @app.route("/")
 def dashboard():
-    players = get_players()
-    return render_template_string(HTML, players=players)
+    return render_template_string(HTML, players=get_players())
 
 # ================= RUN =================
 if __name__ == "__main__":
