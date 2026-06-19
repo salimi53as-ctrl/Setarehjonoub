@@ -25,12 +25,9 @@ def save_users(data):
 
 users = load_users()
 
-# ================= SEND MESSAGE =================
+# ================= SEND =================
 def send_message(chat_id, text, reply_markup=None):
-    payload = {
-        "chat_id": chat_id,
-        "text": text
-    }
+    payload = {"chat_id": chat_id, "text": text}
     if reply_markup:
         payload["reply_markup"] = json.dumps(reply_markup)
 
@@ -40,9 +37,30 @@ def send_message(chat_id, text, reply_markup=None):
 def main_menu():
     return {
         "inline_keyboard": [
-            [{"text": "📋 ثبت‌نام", "callback_data": "register"}],
-            [{"text": "📊 وضعیت من", "callback_data": "status"}],
-            [{"text": "🛠 ادمین", "callback_data": "admin"}],
+            [{"text": "📋 ثبت‌نام بازیکن", "callback_data": "reg"}],
+            [{"text": "📊 پروفایل من", "callback_data": "profile"}],
+            [{"text": "🛠 پنل ادمین", "callback_data": "admin"}]
+        ]
+    }
+
+# ================= REGISTRATION FLOW =================
+def position_menu():
+    return {
+        "inline_keyboard": [
+            [{"text": "🥅 دروازه‌بان", "callback_data": "pos_gk"}],
+            [{"text": "🛡 دفاع", "callback_data": "pos_def"}],
+            [{"text": "🎯 هافبک", "callback_data": "pos_mid"}],
+            [{"text": "⚡ حمله", "callback_data": "pos_att"}]
+        ]
+    }
+
+def age_menu():
+    return {
+        "inline_keyboard": [
+            [{"text": "8-10", "callback_data": "age1"}],
+            [{"text": "11-13", "callback_data": "age2"}],
+            [{"text": "14-16", "callback_data": "age3"}],
+            [{"text": "17-18", "callback_data": "age4"}]
         ]
     }
 
@@ -51,52 +69,83 @@ def main_menu():
 def webhook():
 
     data = request.get_json()
-
     if not data:
         return "ok"
 
-    # ================= CALLBACK BUTTON =================
+    # ================= BUTTONS =================
     if "callback_query" in data:
         cq = data["callback_query"]
         chat_id = str(cq["message"]["chat"]["id"])
-        data_cb = cq["data"]
+        cb = cq["data"]
 
         if chat_id not in users:
             users[chat_id] = {"step": 0, "data": {}}
 
-        user = users[chat_id]
+        u = users[chat_id]
 
-        # ---------------- REGISTER ----------------
-        if data_cb == "register":
-            send_message(chat_id, "⚽ نام و نام خانوادگی را وارد کنید:")
-            user["step"] = 1
+        # -------- START REG --------
+        if cb == "reg":
+            send_message(chat_id, "👤 نام و نام خانوادگی را وارد کنید:")
+            u["step"] = 1
 
-        # ---------------- STATUS ----------------
-        elif data_cb == "status":
-            d = user.get("data", {})
+        # -------- POSITION --------
+        elif cb.startswith("pos_"):
+            pos_map = {
+                "pos_gk": "دروازه‌بان",
+                "pos_def": "دفاع",
+                "pos_mid": "هافبک",
+                "pos_att": "حمله"
+            }
+            u["data"]["position"] = pos_map.get(cb, "-")
+            send_message(chat_id, "📅 رده سنی را انتخاب کنید:", age_menu())
+            u["step"] = 3
+
+        # -------- AGE --------
+        elif cb.startswith("age"):
+            age_map = {
+                "age1": "8-10",
+                "age2": "11-13",
+                "age3": "14-16",
+                "age4": "17-18"
+            }
+            u["data"]["age"] = age_map.get(cb, "-")
+
+            send_message(chat_id, "📞 شماره تماس را وارد کنید:")
+            u["step"] = 4
+
+        # -------- PROFILE --------
+        elif cb == "profile":
+            d = u.get("data", {})
             send_message(chat_id,
-                f"📊 وضعیت شما:\n\n"
+                f"📊 پروفایل شما:\n\n"
                 f"👤 نام: {d.get('name','-')}\n"
+                f"⚽ پست: {d.get('position','-')}\n"
+                f"👶 رده سنی: {d.get('age','-')}\n"
                 f"📞 تماس: {d.get('phone','-')}"
             )
 
-        # ---------------- ADMIN ----------------
-        elif data_cb == "admin":
+        # -------- ADMIN --------
+        elif cb == "admin":
             if chat_id != ADMIN_ID:
                 send_message(chat_id, "⛔ دسترسی ندارید")
                 return "ok"
 
-            msg = "📋 لیست بازیکنان:\n\n"
+            msg = "🛠 لیست کامل بازیکنان:\n\n"
 
-            for i, (uid, udata) in enumerate(users.items(), start=1):
-                d = udata.get("data", {})
-                msg += f"{i}) {d.get('name','-')} | {d.get('phone','-')}\n"
+            for i, (uid, ud) in enumerate(users.items(), start=1):
+                d = ud.get("data", {})
+                msg += (
+                    f"{i}) {d.get('name','-')} | "
+                    f"{d.get('position','-')} | "
+                    f"{d.get('age','-')} | "
+                    f"{d.get('phone','-')}\n"
+                )
 
             send_message(chat_id, msg)
 
         return "ok"
 
-    # ================= TEXT MESSAGE =================
+    # ================= TEXT =================
     if "message" in data:
 
         msg = data["message"]
@@ -106,41 +155,22 @@ def webhook():
         if chat_id not in users:
             users[chat_id] = {"step": 0, "data": {}}
 
-        user = users[chat_id]
+        u = users[chat_id]
 
-        # /start
         if text == "/start":
-            send_message(
-                chat_id,
-                "⚽ به باشگاه ستاره جنوب خوش آمدید 🐉\n\nاز منو انتخاب کنید:",
+            send_message(chat_id,
+                "⚽ باشگاه ستاره جنوب 🐉\nبه سیستم حرفه‌ای خوش آمدید",
                 main_menu()
             )
-            return "ok"
 
-        # ================= REGISTRATION STEPS =================
-        if user["step"] == 1:
-            user["data"]["name"] = text
-            send_message(chat_id, "👨 نام پدر؟")
-            user["step"] = 2
+        elif u["step"] == 1:
+            u["data"]["name"] = text
+            send_message(chat_id, "⚽ پست بازی را انتخاب کنید:", position_menu())
+            u["step"] = 2
 
-        elif user["step"] == 2:
-            user["data"]["father"] = text
-            send_message(chat_id, "🆔 کد ملی؟")
-            user["step"] = 3
-
-        elif user["step"] == 3:
-            user["data"]["nid"] = text
-            send_message(chat_id, "🎂 تاریخ تولد؟")
-            user["step"] = 4
-
-        elif user["step"] == 4:
-            user["data"]["birth"] = text
-            send_message(chat_id, "📞 شماره تماس؟")
-            user["step"] = 5
-
-        elif user["step"] == 5:
-            user["data"]["phone"] = text
-            user["step"] = 0
+        elif u["step"] == 4:
+            u["data"]["phone"] = text
+            u["step"] = 0
 
             send_message(chat_id,
                 "✅ ثبت‌نام کامل شد ⚽\nبه ستاره جنوب خوش آمدید 🐉",
