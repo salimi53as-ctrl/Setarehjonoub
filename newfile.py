@@ -1,113 +1,82 @@
 import os
-from flask import Flask, request
-import requests
 
-app = Flask(__name__)
+# =========================
+# ساخت فایل بازیکنان اگر وجود ندارد
+# =========================
+if not os.path.exists("players.txt"):
+    with open("players.txt", "w", encoding="utf-8") as f:
+        f.write("")
 
-# توکن از Environment Variable
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+# =========================
+# داشبورد
+# =========================
+def dashboard():
+    print("\n" + "="*40)
+    print("📊 داشبورد باشگاه ستاره جنوب")
+    print("="*40)
+    print("🏟️ نام باشگاه: ستاره جنوب")
+    print("⚽ وضعیت: فعال")
+    print("👥 مدیریت بازیکنان: فعال")
+    print("="*40)
 
-if not BOT_TOKEN:
-    raise Exception("BOT_TOKEN is not set!")
+# =========================
+# افزودن بازیکن
+# =========================
+def add_player():
+    name = input("نام بازیکن: ")
+    age = input("سن: ")
+    position = input("پست: ")
 
-# آدرس API بله
-BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
+    with open("players.txt", "a", encoding="utf-8") as f:
+        f.write(f"{name},{age},{position}\n")
 
+    print("✅ بازیکن با موفقیت اضافه شد!")
 
-# ارسال پیام
-def send_message(chat_id, text, keyboard=None):
-    url = f"{BASE_URL}/sendMessage"
+# =========================
+# نمایش بازیکنان
+# =========================
+def show_players():
+    print("\n📋 لیست بازیکنان:")
 
-    data = {
-        "chat_id": chat_id,
-        "text": text
-    }
+    try:
+        with open("players.txt", "r", encoding="utf-8") as f:
+            lines = f.readlines()
 
-    if keyboard:
-        data["reply_markup"] = {
-            "keyboard": keyboard,
-            "resize_keyboard": True
-        }
+        if len(lines) == 0:
+            print("⚠️ هیچ بازیکنی ثبت نشده است")
+            return
 
-    requests.post(url, json=data)
+        for i, line in enumerate(lines, start=1):
+            name, age, position = line.strip().split(",")
+            print(f"{i}. {name} | سن: {age} | پست: {position}")
 
+    except FileNotFoundError:
+        print("❌ فایل بازیکنان وجود ندارد")
 
-# مدیریت پیام‌ها
-def handle_message(message):
-    chat_id = message["chat"]["id"]
-    text = message.get("text", "")
+# =========================
+# منوی اصلی
+# =========================
+def menu():
+    while True:
+        dashboard()
 
-    if text == "/start":
-        keyboard = [
-            ["📊 داشبورد", "👥 بازیکنان"],
-            ["ℹ️ راهنما"]
-        ]
+        print("\n1️⃣ افزودن بازیکن")
+        print("2️⃣ نمایش بازیکنان")
+        print("3️⃣ خروج")
 
-        send_message(
-            chat_id,
-            "⚽ به ربات باشگاه ستاره جنوب خوش آمدید\n\nیکی از گزینه‌های زیر را انتخاب کنید:",
-            keyboard
-        )
+        choice = input("انتخاب شما: ")
 
-    elif text == "📊 داشبورد":
-        send_message(
-            chat_id,
-            """📊 داشبورد باشگاه ستاره جنوب
-
-🏟️ نام باشگاه: ستاره جنوب
-⚽ بخش مدیریت فعال است
-👥 مدیریت بازیکنان فعال است"""
-        )
-
-    elif text == "👥 بازیکنان":
-
-        if os.path.exists("players.txt"):
-            with open("players.txt", "r", encoding="utf-8") as f:
-                players = f.read()
-
-            if players.strip():
-                send_message(chat_id, "👥 لیست بازیکنان:\n\n" + players)
-            else:
-                send_message(chat_id, "هنوز بازیکنی ثبت نشده است")
+        if choice == "1":
+            add_player()
+        elif choice == "2":
+            show_players()
+        elif choice == "3":
+            print("👋 خروج از برنامه")
+            break
         else:
-            send_message(chat_id, "فایل بازیکنان وجود ندارد")
+            print("❌ انتخاب نامعتبر")
 
-    elif text == "ℹ️ راهنما":
-        send_message(
-            chat_id,
-            "برای کار با ربات از دکمه‌های پایین صفحه استفاده کنید."
-        )
-
-    else:
-        send_message(
-            chat_id,
-            "دستور نامعتبر است ❌\n/start را ارسال کنید."
-        )
-
-
-# Webhook بله
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json()
-
-    if data and "message" in data:
-        handle_message(data["message"])
-
-    return "ok", 200
-
-
-# صفحه اصلی سایت
-@app.route("/")
-def home():
-    return """
-    <h1>⚽ Setareh Jonoub FC</h1>
-    <h2>Bot is Running ✅</h2>
-    <p>Bale Webhook Active 🚀</p>
-    """
-
-
-# اجرای سرور
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    print("🚀 SERVER STARTING...")
-    app.run(host="0.0.0.0", port=port)
+# =========================
+# اجرای برنامه
+# =========================
+menu()
