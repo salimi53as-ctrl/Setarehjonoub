@@ -4,46 +4,31 @@ import os
 
 app = Flask(__name__)
 
-BOT_TOKEN = BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
+BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
 BASE_URL = f"https://tapi.bale.ai/bot{BOT_TOKEN}"
 
 users = {}
 
 def send_message(chat_id, text):
-    try:
-        requests.post(f"{BASE_URL}/sendMessage", data={
-            "chat_id": chat_id,
-            "text": text
-        })
-    except Exception as e:
-        print("send error:", e)
+    requests.post(f"{BASE_URL}/sendMessage", data={
+        "chat_id": chat_id,
+        "text": text
+    })
 
 @app.route("/", methods=["GET", "POST"])
 def webhook():
 
-    # تست سلامت سرور
     if request.method == "GET":
-        return "Setareh Jonoub Bot is running ⚽🐉"
+        return "BOT IS RUNNING ⚽"
 
-    data = request.get_json(force=True, silent=True)
-    print("DEBUG DATA:", data)
+    data = request.get_json(silent=True)
 
-    if not data:
+    print("RAW:", data)
+
+    if not data or "message" not in data:
         return "no data"
 
-    # 🔥 حالت‌های مختلف ساختار بله
-    msg = None
-
-    if "message" in data:
-        msg = data["message"]
-    elif "update" in data and "message" in data["update"]:
-        msg = data["update"]["message"]
-    elif "body" in data:
-        msg = data["body"]
-
-    if not msg:
-        return "no message"
-
+    msg = data["message"]
     chat_id = msg["chat"]["id"]
     text = msg.get("text", "")
 
@@ -53,7 +38,7 @@ def webhook():
     user = users[chat_id]
 
     if text == "/start":
-        send_message(chat_id, "⚽ سلام به آکادمی ستاره جنوب\nنام و نام خانوادگی؟")
+        send_message(chat_id, "⚽ ثبت نام ستاره جنوب\nنام و نام خانوادگی؟")
         user["step"] = 1
 
     elif user["step"] == 1:
@@ -78,12 +63,7 @@ def webhook():
 
     elif user["step"] == 5:
         user["data"]["phone"] = text
-
-        send_message(chat_id,
-            f"✅ ثبت شد:\n"
-            f"{user['data']}"
-        )
-
+        send_message(chat_id, "✅ ثبت شد")
         user["step"] = 0
         user["data"] = {}
 
