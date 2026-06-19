@@ -1,82 +1,89 @@
-import os
+from flask import Flask, request, redirect, url_for
+
+app = Flask(__name__)
 
 # =========================
-# ساخت فایل بازیکنان اگر وجود ندارد
+# ساخت فایل اگر وجود ندارد
 # =========================
-if not os.path.exists("players.txt"):
-    with open("players.txt", "w", encoding="utf-8") as f:
-        f.write("")
+try:
+    open("players.txt", "x", encoding="utf-8").close()
+except:
+    pass
+
 
 # =========================
 # داشبورد
 # =========================
-def dashboard():
-    print("\n" + "="*40)
-    print("📊 داشبورد باشگاه ستاره جنوب")
-    print("="*40)
-    print("🏟️ نام باشگاه: ستاره جنوب")
-    print("⚽ وضعیت: فعال")
-    print("👥 مدیریت بازیکنان: فعال")
-    print("="*40)
+@app.route("/")
+def home():
+    return """
+    <h1>📊 داشبورد باشگاه ستاره جنوب</h1>
+    <hr>
+    🏟️ نام باشگاه: ستاره جنوب <br>
+    ⚽ وضعیت: فعال <br>
+    👥 مدیریت بازیکنان: فعال <br><br>
 
-# =========================
-# افزودن بازیکن
-# =========================
-def add_player():
-    name = input("نام بازیکن: ")
-    age = input("سن: ")
-    position = input("پست: ")
+    <a href='/players'>👥 لیست بازیکنان</a><br>
+    <a href='/add'>➕ افزودن بازیکن</a>
+    """
 
-    with open("players.txt", "a", encoding="utf-8") as f:
-        f.write(f"{name},{age},{position}\n")
-
-    print("✅ بازیکن با موفقیت اضافه شد!")
 
 # =========================
 # نمایش بازیکنان
 # =========================
-def show_players():
-    print("\n📋 لیست بازیکنان:")
-
+@app.route("/players")
+def players():
     try:
         with open("players.txt", "r", encoding="utf-8") as f:
             lines = f.readlines()
 
-        if len(lines) == 0:
-            print("⚠️ هیچ بازیکنی ثبت نشده است")
-            return
+        if not lines:
+            return "<h2>⚠️ هیچ بازیکنی ثبت نشده</h2><a href='/'>برگشت</a>"
 
-        for i, line in enumerate(lines, start=1):
+        html = "<h2>👥 لیست بازیکنان</h2><hr>"
+
+        for i, line in enumerate(lines, 1):
             name, age, position = line.strip().split(",")
-            print(f"{i}. {name} | سن: {age} | پست: {position}")
+            html += f"{i}. {name} | سن: {age} | پست: {position}<br>"
 
-    except FileNotFoundError:
-        print("❌ فایل بازیکنان وجود ندارد")
+        html += "<br><a href='/'>برگشت</a>"
+        return html
+
+    except:
+        return "<h2>❌ خطا در خواندن فایل</h2>"
+
 
 # =========================
-# منوی اصلی
+# افزودن بازیکن (فرم)
 # =========================
-def menu():
-    while True:
-        dashboard()
+@app.route("/add", methods=["GET", "POST"])
+def add():
+    if request.method == "POST":
+        name = request.form["name"]
+        age = request.form["age"]
+        position = request.form["position"]
 
-        print("\n1️⃣ افزودن بازیکن")
-        print("2️⃣ نمایش بازیکنان")
-        print("3️⃣ خروج")
+        with open("players.txt", "a", encoding="utf-8") as f:
+            f.write(f"{name},{age},{position}\n")
 
-        choice = input("انتخاب شما: ")
+        return redirect(url_for("players"))
 
-        if choice == "1":
-            add_player()
-        elif choice == "2":
-            show_players()
-        elif choice == "3":
-            print("👋 خروج از برنامه")
-            break
-        else:
-            print("❌ انتخاب نامعتبر")
+    return """
+    <h2>➕ افزودن بازیکن</h2>
+
+    <form method="post">
+        نام: <input name="name"><br><br>
+        سن: <input name="age"><br><br>
+        پست: <input name="position"><br><br>
+        <button type="submit">ثبت</button>
+    </form>
+
+    <br><a href='/'>برگشت</a>
+    """
+
 
 # =========================
 # اجرای برنامه
 # =========================
-menu()
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
