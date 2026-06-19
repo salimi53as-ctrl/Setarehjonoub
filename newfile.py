@@ -1,26 +1,33 @@
-from flask import Flask, request, redirect, url_for
+from flask import Flask, request, redirect, url_for, session
 import sqlite3
 import os
 
 app = Flask(__name__)
 
-DB_PATH = "data.db"
+# کلید امنیت Session
+app.secret_key = "SETAREH_JONOUB_1388"
+
+# اطلاعات مدیر (فعلاً ثابت)
+ADMIN_USER = "admin"
+ADMIN_PASS = "12345"
+
+DB = "club.db"
 
 
-# =========================
 # ساخت دیتابیس
-# =========================
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB)
     c = conn.cursor()
+
     c.execute("""
-        CREATE TABLE IF NOT EXISTS players (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            age TEXT,
-            position TEXT
-        )
+    CREATE TABLE IF NOT EXISTS players(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        age TEXT,
+        position TEXT
+    )
     """)
+
     conn.commit()
     conn.close()
 
@@ -28,139 +35,65 @@ def init_db():
 init_db()
 
 
-# =========================
+# بررسی ورود مدیر
+def login_required(func):
+    def wrapper(*args, **kwargs):
+        if "admin" not in session:
+            return redirect(url_for("login"))
+        return func(*args, **kwargs)
+    wrapper.__name__ = func.__name__
+    return wrapper
+
+
 # صفحه اصلی
-# =========================
 @app.route("/")
 def home():
+    if "admin" in session:
+        return redirect("/dashboard")
+
     return """
-    <h1>📊 باشگاه ستاره جنوب (حرفه‌ای)</h1>
+    <h1>🐉⭐ باشگاه ستاره جنوب</h1>
+    <h3>Setareh Jonoub Football Academy</h3>
     <hr>
 
-    <a href="/players">👥 لیست بازیکنان</a><br>
-    <a href="/add">➕ افزودن بازیکن</a><br>
-    <a href="/health">🟢 تست سرور</a><br>
+    <a href="/login">
+        🔐 ورود مدیریت
+    </a>
     """
 
 
-# =========================
-# سلامت سرور
-# =========================
-@app.route("/health")
-def health():
-    return "OK - Server is Running"
+# ورود مدیر
+@app.route("/login", methods=["GET", "POST"])
+def login():
 
+    if request.method == "POST":
 
-# =========================
-# لیست بازیکنان
-# =========================
-@app.route("/players")
-def players():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT * FROM players")
-    rows = c.fetchall()
-    conn.close()
+        user = request.form.get("username")
+        password = request.form.get("password")
 
-    html = "<h2>👥 لیست بازیکنان</h2><hr>"
+        if user == ADMIN_USER and password == ADMIN_PASS:
+            session["admin"] = True
+            return redirect("/dashboard")
 
-    for p in rows:
-        html += f"""
-        {p[0]}. {p[1]} | سن: {p[2]} | پست: {p[3]}
-        <a href="/delete/{p[0]}">🗑 حذف</a>
-        <a href="/edit/{p[0]}">✏ ویرایش</a>
-        <br>
+        return """
+        <h3>❌ نام کاربری یا رمز اشتباه است</h3>
+        <a href="/login">تلاش دوباره</a>
         """
 
-    html += "<br><a href='/'>برگشت</a>"
-    return html
-
-
-# =========================
-# افزودن بازیکن
-# =========================
-@app.route("/add", methods=["GET", "POST"])
-def add():
-    if request.method == "POST":
-        name = request.form.get("name")
-        age = request.form.get("age")
-        position = request.form.get("position")
-
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("INSERT INTO players (name, age, position) VALUES (?, ?, ?)",
-                  (name, age, position))
-        conn.commit()
-        conn.close()
-
-        return redirect(url_for("players"))
-
     return """
-    <h2>➕ افزودن بازیکن</h2>
-    <form method="post">
-        نام: <input name="name"><br><br>
-        سن: <input name="age"><br><br>
-        پست: <input name="position"><br><br>
-        <button type="submit">ثبت</button>
+    <h2>🔐 ورود مدیر باشگاه</h2>
+
+    <form method="POST">
+
+    نام کاربری:
+    <input name="username"><br><br>
+
+    رمز عبور:
+    <input type="password" name="password"><br><br>
+
+    <button>
+    ورود
+    </button>
+
     </form>
     """
-
-
-# =========================
-# حذف بازیکن
-# =========================
-@app.route("/delete/<int:id>")
-def delete(id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM players WHERE id=?", (id,))
-    conn.commit()
-    conn.close()
-    return redirect(url_for("players"))
-
-
-# =========================
-# ویرایش بازیکن
-# =========================
-@app.route("/edit/<int:id>", methods=["GET", "POST"])
-def edit(id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-
-    if request.method == "POST":
-        name = request.form.get("name")
-        age = request.form.get("age")
-        position = request.form.get("position")
-
-        c.execute("""
-            UPDATE players
-            SET name=?, age=?, position=?
-            WHERE id=?
-        """, (name, age, position, id))
-
-        conn.commit()
-        conn.close()
-
-        return redirect(url_for("players"))
-
-    c.execute("SELECT * FROM players WHERE id=?", (id,))
-    player = c.fetchone()
-    conn.close()
-
-    return f"""
-    <h2>✏ ویرایش بازیکن</h2>
-    <form method="post">
-        نام: <input name="name" value="{player[1]}"><br><br>
-        سن: <input name="age" value="{player[2]}"><br><br>
-        پست: <input name="position" value="{player[3]}"><br><br>
-        <button type="submit">ذخیره</button>
-    </form>
-    """
-
-
-# =========================
-# اجرا
-# =========================
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port, debug=False)
