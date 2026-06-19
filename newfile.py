@@ -4,24 +4,23 @@ import os
 app = Flask(__name__)
 
 # =========================
-# فایل بازیکنان
+# ساخت فایل بازیکنان
 # =========================
 if not os.path.exists("players.txt"):
     open("players.txt", "w", encoding="utf-8").close()
 
 
 # =========================
-# استایل حرفه‌ای
+# تست سلامت سرور (خیلی مهم برای Render)
 # =========================
-STYLE = """
-<style>
-body { font-family: Arial; background:#0f172a; color:white; text-align:center; }
-a { color:#38bdf8; text-decoration:none; margin:10px; display:inline-block; }
-.card { background:#1e293b; padding:15px; margin:10px auto; width:60%; border-radius:10px; }
-button { padding:5px 10px; border:none; border-radius:5px; cursor:pointer; }
-input { padding:5px; margin:5px; }
-</style>
-"""
+@app.route("/health")
+def health():
+    return "OK - Server is Running"
+
+
+@app.route("/test")
+def test():
+    return "TEST OK - App Works"
 
 
 # =========================
@@ -29,45 +28,46 @@ input { padding:5px; margin:5px; }
 # =========================
 @app.route("/")
 def home():
-    return STYLE + """
+    return """
     <h1>📊 باشگاه ستاره جنوب</h1>
+    <hr>
+    🏟️ باشگاه: ستاره جنوب <br>
+    ⚽ وضعیت: فعال <br>
+    👥 مدیریت بازیکنان: فعال <br><br>
 
-    <div class="card">
-        🏟️ باشگاه: ستاره جنوب<br>
-        ⚽ وضعیت: فعال<br>
-        👥 سیستم مدیریت بازیکنان
-    </div>
-
-    <a href="/players">👥 بازیکنان</a>
-    <a href="/add">➕ افزودن بازیکن</a>
+    <a href="/players">👥 لیست بازیکنان</a><br>
+    <a href="/add">➕ افزودن بازیکن</a><br>
+    <a href="/health">🟢 تست سرور</a><br>
+    <a href="/test">🧪 تست دوم</a><br>
     """
 
 
 # =========================
-# لیست بازیکنان + حذف
+# نمایش بازیکنان
 # =========================
 @app.route("/players")
 def players():
-    with open("players.txt", "r", encoding="utf-8") as f:
-        lines = f.readlines()
+    try:
+        with open("players.txt", "r", encoding="utf-8") as f:
+            lines = f.readlines()
 
-    html = STYLE + "<h2>👥 لیست بازیکنان</h2>"
+        if not lines:
+            return "<h2>⚠️ هیچ بازیکنی ثبت نشده</h2><br><a href='/'>برگشت</a>"
 
-    if not lines:
-        return html + "<p>⚠️ بازیکنی وجود ندارد</p><a href='/'>برگشت</a>"
+        html = "<h2>👥 لیست بازیکنان</h2><hr>"
 
-    for i, line in enumerate(lines):
-        name, age, position = line.strip().split(",")
+        for i, line in enumerate(lines):
+            parts = line.strip().split(",")
 
-        html += f"""
-        <div class="card">
-            {name} | سن: {age} | پست: {position}<br><br>
-            <a href="/delete/{i}">🗑 حذف</a>
-        </div>
-        """
+            if len(parts) == 3:
+                name, age, position = parts
+                html += f"{i+1}. {name} | سن: {age} | پست: {position}<br>"
 
-    html += "<a href='/'>برگشت</a>"
-    return html
+        html += "<br><a href='/'>برگشت</a>"
+        return html
+
+    except Exception as e:
+        return f"<h2>❌ خطا</h2><p>{e}</p>"
 
 
 # =========================
@@ -80,18 +80,19 @@ def add():
         age = request.form.get("age")
         position = request.form.get("position")
 
-        with open("players.txt", "a", encoding="utf-8") as f:
-            f.write(f"{name},{age},{position}\n")
+        if name and age and position:
+            with open("players.txt", "a", encoding="utf-8") as f:
+                f.write(f"{name},{age},{position}\n")
 
         return redirect(url_for("players"))
 
-    return STYLE + """
+    return """
     <h2>➕ افزودن بازیکن</h2>
 
     <form method="post">
-        <input name="name" placeholder="نام"><br>
-        <input name="age" placeholder="سن"><br>
-        <input name="position" placeholder="پست"><br><br>
+        نام: <input name="name"><br><br>
+        سن: <input name="age"><br><br>
+        پست: <input name="position"><br><br>
         <button type="submit">ثبت</button>
     </form>
 
@@ -100,24 +101,7 @@ def add():
 
 
 # =========================
-# حذف بازیکن
-# =========================
-@app.route("/delete/<int:index>")
-def delete(index):
-    with open("players.txt", "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    if 0 <= index < len(lines):
-        lines.pop(index)
-
-    with open("players.txt", "w", encoding="utf-8") as f:
-        f.writelines(lines)
-
-    return redirect(url_for("players"))
-
-
-# =========================
-# اجرای برنامه
+# اجرای برنامه (خیلی مهم برای Render)
 # =========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
