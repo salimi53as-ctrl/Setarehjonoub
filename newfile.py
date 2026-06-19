@@ -5,7 +5,7 @@ import os
 
 app = Flask(__name__)
 
-# ================= BOT CONFIG =================
+# ================= BOT TOKEN =================
 BOT_TOKEN = "19108680:VLIdd-6KJY_joTrmPwsTXkIXGVh9pgFs6lM"
 BASE_URL = f"https://tapi.bale.ai/bot{848341355}"
 
@@ -39,11 +39,11 @@ def save_player(data):
         INSERT INTO players (name, father, national_id, birth, phone)
         VALUES (?, ?, ?, ?, ?)
     """, (
-        data["name"],
-        data["father"],
-        data["national_id"],
-        data["birth"],
-        data["phone"]
+        data.get("name"),
+        data.get("father"),
+        data.get("national_id"),
+        data.get("birth"),
+        data.get("phone")
     ))
     conn.commit()
     conn.close()
@@ -113,7 +113,7 @@ def webhook():
         save_player(user["data"])
 
         send_message(chat_id,
-            "✅ ثبت شد!\n\n"
+            "✅ ثبت شد ✔️\n\n"
             f"👤 {user['data']['name']}\n"
             f"📞 {user['data']['phone']}"
         )
@@ -128,14 +128,35 @@ HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>ستاره جنوب</title>
-<style>
-body{background:#0b1a2b;color:white;font-family:sans-serif;text-align:center;}
-h1{color:gold;}
-table{margin:auto;width:90%;border-collapse:collapse;}
-th,td{padding:10px;border:1px solid #444;}
-th{background:#1f3b5c;color:gold;}
-</style>
+    <title>ستاره جنوب</title>
+    <style>
+        body {
+            background: #0b1a2b;
+            color: white;
+            font-family: sans-serif;
+            text-align: center;
+        }
+
+        h1 {
+            color: gold;
+        }
+
+        table {
+            margin: auto;
+            width: 95%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            border: 1px solid #444;
+            padding: 10px;
+        }
+
+        th {
+            background: #1f3b5c;
+            color: gold;
+        }
+    </style>
 </head>
 <body>
 
@@ -144,20 +165,20 @@ th{background:#1f3b5c;color:gold;}
 
 <table>
 <tr>
-<th>نام</th>
-<th>پدر</th>
-<th>کد ملی</th>
-<th>تولد</th>
-<th>تماس</th>
+    <th>نام</th>
+    <th>پدر</th>
+    <th>کد ملی</th>
+    <th>تولد</th>
+    <th>تماس</th>
 </tr>
 
 {% for p in players %}
 <tr>
-<td>{{p[0]}}</td>
-<td>{{p[1]}}</td>
-<td>{{p[2]}}</td>
-<td>{{p[3]}}</td>
-<td>{{p[4]}}</td>
+    <td>{{p[0]}}</td>
+    <td>{{p[1]}}</td>
+    <td>{{p[2]}}</td>
+    <td>{{p[3]}}</td>
+    <td>{{p[4]}}</td>
 </tr>
 {% endfor %}
 
@@ -168,7 +189,7 @@ th{background:#1f3b5c;color:gold;}
 """
 
 @app.route("/")
-def dashboard():
+def home():
     return render_template_string(HTML, players=get_players())
 
 # ================= RUN =================
